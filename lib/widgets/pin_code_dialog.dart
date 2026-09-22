@@ -536,14 +536,15 @@ class _PinCodeDialogState extends State<PinCodeDialog> with SingleTickerProvider
               ),
               const SizedBox(width: 24),
               // 指纹快捷解锁按钮
-              FutureBuilder<bool>(
+              FutureBuilder<List<bool>>(
                 future: Future.wait([
                   _securityService.isBiometricEnabled(),
                   _securityService.canUseBiometric(),
                 ]),
                 builder: (context, snapshot) {
-                  final enabled = snapshot.data?[0] == true;
-                  final available = snapshot.data?[1] == true;
+                  final data = snapshot.data;
+                  final enabled = data?[0] == true;
+                  final available = data?[1] == true;
                   if (!enabled || !available) return const SizedBox();
                   return IconButton(
                     onPressed: _tryBiometricUnlock,

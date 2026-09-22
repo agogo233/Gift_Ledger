@@ -34,6 +34,30 @@ class StatisticsInsight {
   final IconData icon;
 }
 
+/// 单人在图谱中的聚合数据
+class PersonGraphData {
+  const PersonGraphData({
+    required this.guestId,
+    required this.name,
+    required this.relationship,
+    required this.totalReceived,
+    required this.totalSent,
+    required this.count,
+    required this.latestDate,
+  });
+
+  final int guestId;
+  final String name;
+  final String relationship;
+  final double totalReceived;
+  final double totalSent;
+  final int count;
+  final DateTime latestDate;
+
+  /// 净流入（收 - 送），用于内外圈布局
+  double get netFlow => totalReceived - totalSent;
+}
+
 class StatisticsComputationService {
   const StatisticsComputationService();
 
@@ -183,32 +207,6 @@ class StatisticsComputationService {
     }
 
     return insights;
-  }
-
-  // --- 关联图谱：按人聚合 ---
-
-  /// 单人在图谱中的聚合数据
-  class PersonGraphData {
-    const PersonGraphData({
-      required this.guestId,
-      required this.name,
-      required this.relationship,
-      required this.totalReceived,
-      required this.totalSent,
-      required this.count,
-      required this.latestDate,
-    });
-
-    final int guestId;
-    final String name;
-    final String relationship;
-    final double totalReceived;
-    final double totalSent;
-    final int count;
-    final DateTime latestDate;
-
-    /// 净流入（收 - 送），用于内外圈布局
-    double get netFlow => totalReceived - totalSent;
   }
 
   /// 按联系人聚合礼金记录，按总额倒序取 Top N。
