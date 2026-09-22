@@ -558,7 +558,6 @@ class _PinCodeDialogState extends State<PinCodeDialog> with SingleTickerProvider
               ),
             ],
           ),
-        ],
         ] else
           const SizedBox(height: 40),
         // 数字键盘
