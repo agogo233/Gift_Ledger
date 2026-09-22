@@ -6,7 +6,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart'; // 启动页优化
 import 'package:provider/provider.dart';
 
-import 'models/update_target.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/statistics_screen.dart';
@@ -16,13 +15,7 @@ import 'services/db_init_native.dart'
 import 'services/notification_service.dart';
 import 'services/security_service.dart';
 import 'services/storage_service.dart';
-import 'services/update/app_build_info_service.dart';
-import 'services/update/update_controller.dart';
-import 'services/update/update_prompt_policy.dart';
-import 'services/update/update_repository.dart';
-import 'services/update/update_ui_coordinator.dart';
 import 'theme/app_theme.dart';
-import 'widgets/update/update_prompt_dialog.dart';
 
 void main() async {
   // 1. 提前初始化 Flutter 绑定
@@ -81,12 +74,6 @@ class GiftMoneyTrackerApp extends StatelessWidget {
         // 使用 ChangeNotifierProvider 延迟创建，避免启动时立即实例化
         ChangeNotifierProvider(create: (_) => StorageService()),
         ChangeNotifierProvider(create: (_) => SecurityService()),
-        ChangeNotifierProvider(
-          create: (_) => UpdateController(
-            repository: UpdateRepository(),
-            appBuildInfoService: const AppBuildInfoService(),
-          ),
-        ),
       ],
       child: MaterialApp(
         title: '随礼记',
@@ -115,58 +102,31 @@ class MainNavigation extends StatefulWidget {
   const MainNavigation({
     super.key,
     this.screens,
-    this.promptPresenter = _defaultUpdatePromptPresenter,
   });
 
   final List<Widget>? screens;
-  final UpdatePromptPresenter promptPresenter;
 
   @override
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
-typedef UpdatePromptPresenter = Future<UpdatePromptDialogResult?> Function(
-  BuildContext context,
-  UpdateTarget target,
-  VoidCallback onShown,
-);
-
-Future<UpdatePromptDialogResult?> _defaultUpdatePromptPresenter(
-  BuildContext context,
-  UpdateTarget target,
-  VoidCallback onShown,
-) {
-  return showDialog<UpdatePromptDialogResult>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => UpdatePromptDialog(
-      target: target,
-      onShown: onShown,
-    ),
-  );
-}
-
-class _MainNavigationState extends State<MainNavigation>
-    with WidgetsBindingObserver {
+class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
-  UpdateController? _updateController;
-  bool _didScheduleStartupUpdateCheck = false;
-  final UpdatePromptCoordinator _updatePromptCoordinator =
-      UpdatePromptCoordinator();
+
+  // 缓存屏幕实例，避免每次访问都创建新实例
+  // 移除 GlobalKey 反模式，使用 Provider 自动刷新机制
+  late final List<Widget> _screens;
+
+  // 底部导航栏项目
   final List<_NavItem> _navItems = [
     const _NavItem(label: '首页', icon: Icons.home_rounded),
     const _NavItem(label: '统计', icon: Icons.bar_chart_rounded),
     const _NavItem(label: '设置', icon: Icons.settings_rounded),
   ];
 
-  // 缓存屏幕实例，避免每次访问都创建新实例
-  // 移除 GlobalKey 反模式，使用 Provider 自动刷新机制
-  late final List<Widget> _screens;
-
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     // 初始化屏幕列表（只创建一次）
     _screens = widget.screens ??
         [
@@ -176,99 +136,13 @@ class _MainNavigationState extends State<MainNavigation>
         ];
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    if (_updateController == null) {
-      _updateController = context.read<UpdateController>();
-      _updateController!.addListener(_handleUpdateControllerChanged);
-    }
-
-    if (!_didScheduleStartupUpdateCheck) {
-      _didScheduleStartupUpdateCheck = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _updateController?.checkForUpdates(source: UpdateCheckSource.startup);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _updateController?.removeListener(_handleUpdateControllerChanged);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state != AppLifecycleState.resumed) {
-      return;
-    }
-
-    final controller = _updateController;
-    if (controller == null) {
-      return;
-    }
-
-    unawaited(controller.handleAppResumed());
-  }
-
-  void _handleUpdateControllerChanged() {
-    final controller = _updateController;
-    if (!mounted || controller == null) {
-      return;
-    }
-
-    final state = controller.state;
-    final target = state.target;
-    final dialogKey = _updatePromptCoordinator.beginPresentation(state);
-    if (dialogKey == null || target == null) {
-      return;
-    }
-
-    _presentUpdatePrompt(target: target);
-  }
-
-  Future<void> _presentUpdatePrompt({
-    required UpdateTarget target,
-  }) async {
-    final controller = _updateController;
-    if (controller == null) {
-      return;
-    }
-
-    try {
-      final result = await widget.promptPresenter(
-        context,
-        target,
-        () {
-          controller.markCurrentTargetPresented();
-        },
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      if (result?.ignoreCurrentVersion == true) {
-        await controller.ignoreCurrentTarget();
-      }
-    } finally {
-      _updatePromptCoordinator.endPresentation();
-    }
-  }
-
   void _onTabSelected(int index) {
     if (_currentIndex == index) return;
     setState(() => _currentIndex = index);
     // 不再需要手动刷新，页面会自动响应数据变化
   }
 
-  Widget _buildDynamicDock({
-    required bool showSettingsRedDot,
-  }) {
+  Widget _buildDynamicDock() {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -286,22 +160,15 @@ class _MainNavigationState extends State<MainNavigation>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: List.generate(_navItems.length, (index) {
-          return _buildTabItem(
-            index,
-            showSettingsRedDot: showSettingsRedDot,
-          );
+          return _buildTabItem(index);
         }),
       ),
     );
   }
 
-  Widget _buildTabItem(
-    int index, {
-    required bool showSettingsRedDot,
-  }) {
+  Widget _buildTabItem(int index) {
     final isActive = _currentIndex == index;
     final item = _navItems[index];
-    final shouldShowBadge = index == 2 && showSettingsRedDot;
 
     return GestureDetector(
       onTap: () => _onTabSelected(index),
@@ -314,6 +181,7 @@ class _MainNavigationState extends State<MainNavigation>
         decoration: BoxDecoration(
           color: isActive ? AppTheme.textPrimary : Colors.transparent,
           borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white, width: 0.5),
         ),
         child: Stack(
           clipBehavior: Clip.none,
@@ -323,26 +191,6 @@ class _MainNavigationState extends State<MainNavigation>
               color: isActive ? Colors.white : AppTheme.textSecondary,
               size: 24,
             ),
-            if (shouldShowBadge)
-              Positioned(
-                right: -1,
-                top: -2,
-                child: Container(
-                  key: const ValueKey('settings-tab-red-dot'),
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: Colors.redAccent,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isActive
-                          ? AppTheme.textPrimary
-                          : Colors.white.withValues(alpha: 0.96),
-                      width: 1.8,
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -352,9 +200,6 @@ class _MainNavigationState extends State<MainNavigation>
   @override
   Widget build(BuildContext context) {
     const dockBottomPadding = 12.0;
-    final showSettingsRedDot = context.select<UpdateController, bool>(
-      (controller) => controller.state.showRedDot,
-    );
 
     return Scaffold(
       // extendBody 移除，避免与子页面 Scaffold 冲突导致内容不可见
@@ -375,26 +220,11 @@ class _MainNavigationState extends State<MainNavigation>
               minimum: const EdgeInsets.only(bottom: dockBottomPadding),
               child: Center(
                 child: RepaintBoundary(
-                  child: _buildDynamicDock(
-                    showSettingsRedDot: showSettingsRedDot,
-                  ),
+                  child: _buildDynamicDock(),
                 ),
               ),
             ),
           ),
-          // 旧的 FAB 已隐藏，使用 dashboard_screen 中的 ExpandableFab
-          // if (_currentIndex == 0)
-          //   Positioned(
-          //     right: AppTheme.spacingL,
-          //     bottom: fabBottomOffset,
-          //     child: FloatingActionButton(
-          //       onPressed: _openAddRecord,
-          //       backgroundColor: AppTheme.primaryColor,
-          //       elevation: 4,
-          //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          //       child: const Icon(Icons.add_rounded, size: 28, color: Colors.white),
-          //     ),
-          //   ),
         ],
       ),
     );

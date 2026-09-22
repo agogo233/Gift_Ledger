@@ -34,9 +34,7 @@ dependencies:
   url_launcher: ^6.2.5
   font_awesome_flutter: ^10.7.0
   flutter_native_splash: ^2.4.4  # 启动页优化（降级以兼容 excel)
-  dio: ^5.9.0
   package_info_plus: ^8.3.1
-  open_filex: ^4.7.0
 
 dev_dependencies:
   flutter_test:

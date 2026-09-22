@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../theme/app_theme.dart';
 import '../widgets/custom_toast.dart';
 import '../widgets/export_dialogs.dart';
@@ -9,10 +9,7 @@ import '../services/template_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import '../services/security_service.dart';
-import '../services/update/app_build_info_service.dart';
-import '../services/update/update_controller.dart';
 import '../widgets/pin_code_dialog.dart';
-import '../widgets/update/about_app_entry_tile.dart';
 import 'about_app_screen.dart';
 import 'template_settings_screen.dart';
 
@@ -48,8 +45,6 @@ class SettingsScreenState extends State<SettingsScreen> {
   late final dynamic _notificationService;
   late final dynamic _db;
   late final dynamic _securityService;
-  final AppBuildInfoService _appBuildInfoService = const AppBuildInfoService();
-
   @override
   void initState() {
     super.initState();
@@ -77,10 +72,10 @@ class SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadAppInfo() async {
     try {
-      final buildInfo = await _appBuildInfoService.getCurrentBuildInfo();
+      final packageInfo = await PackageInfo.fromPlatform();
       if (!mounted) return;
       setState(() {
-        _appVersion = buildInfo.version;
+        _appVersion = packageInfo.version;
       });
     } catch (_) {
       if (!mounted) return;
@@ -209,53 +204,6 @@ class SettingsScreenState extends State<SettingsScreen> {
   /// 公开刷新方法，供控制器调用
   void refreshData() {
     _loadSettings();
-  }
-
-  ({bool showRedDot, String? chipText}) _resolveAboutUpdateEntryState(
-    UpdateState updateState,
-  ) {
-    final shouldShowUpdateState = updateState.showRedDot ||
-        updateState.target != null ||
-        updateState.status == UpdateStateStatus.downloading ||
-        updateState.status == UpdateStateStatus.installing ||
-        updateState.status == UpdateStateStatus.permissionRequired;
-
-    if (!shouldShowUpdateState) {
-      return (showRedDot: false, chipText: null);
-    }
-
-    final defaultChipText = switch (updateState.status) {
-      UpdateStateStatus.downloading => '后台下载中',
-      UpdateStateStatus.installing => '等待安装',
-      UpdateStateStatus.permissionRequired => '需开启权限',
-      UpdateStateStatus.error => '更新未完成',
-      _ => '发现新版本',
-    };
-
-    switch (updateState.status) {
-      case UpdateStateStatus.downloading:
-        final fraction = updateState.downloadProgress?.fraction;
-        if (fraction == null) {
-          return (showRedDot: true, chipText: defaultChipText);
-        }
-        final percent = (fraction * 100).clamp(0, 100).round();
-        return (showRedDot: true, chipText: '下载中 $percent%');
-      case UpdateStateStatus.installing:
-        return (showRedDot: true, chipText: defaultChipText);
-      case UpdateStateStatus.permissionRequired:
-        return (showRedDot: true, chipText: defaultChipText);
-      case UpdateStateStatus.error:
-        return (
-          showRedDot: updateState.target != null || updateState.showRedDot,
-          chipText: updateState.target == null ? null : defaultChipText,
-        );
-      case UpdateStateStatus.available:
-      case UpdateStateStatus.idle:
-      case UpdateStateStatus.checking:
-      case UpdateStateStatus.upToDate:
-      case UpdateStateStatus.unsupported:
-        return (showRedDot: true, chipText: '发现新版本');
-    }
   }
 
   @override
@@ -455,31 +403,49 @@ class SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    // 关于
+// 关于
                     _buildSectionCard(
                       title: '关于',
                       children: [
-                        Selector<UpdateController,
-                            ({bool showRedDot, String? chipText})>(
-                          selector: (_, controller) =>
-                              _resolveAboutUpdateEntryState(controller.state),
-                          builder: (context, aboutUpdateState, _) {
-                            return AboutAppEntryTile(
-                              currentVersion: _appVersion,
-                              showRedDot: aboutUpdateState.showRedDot,
-                              showUpdateChip: aboutUpdateState.chipText != null,
-                              updateChipText:
-                                  aboutUpdateState.chipText ?? '发现新版本',
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => AboutAppScreen(
-                                      currentVersion: _appVersion,
-                                    ),
-                                  ),
-                                );
-                              },
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.info_outline_rounded,
+                              color: AppTheme.primaryColor,
+                              size: 20,
+                            ),
+                          ),
+                          title: const Text(
+                            '关于随礼记',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Text(
+                            _appVersion.trim().isEmpty
+                                ? '当前版本未知'
+                                : '当前版本 v$_appVersion',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                          trailing: const Icon(
+                            Icons.chevron_right_rounded,
+                            color: AppTheme.textSecondary,
+                            size: 20,
+                          ),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                             MaterialPageRoute(
+                                builder: (_) => AboutAppScreen(
+                                  currentVersion: _appVersion,
+                                ),
+                              ),
                             );
                           },
                         ),

@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gift_ledger/main.dart';
 import 'package:gift_ledger/models/gift.dart';
 import 'package:gift_ledger/models/guest.dart';
-import 'package:gift_ledger/models/update_manifest.dart';
 import 'package:gift_ledger/screens/about_app_screen.dart';
 import 'package:gift_ledger/screens/add_record_screen.dart';
 import 'package:gift_ledger/screens/dashboard_screen.dart';
@@ -13,107 +12,38 @@ import 'package:gift_ledger/screens/settings_screen.dart';
 import 'package:gift_ledger/screens/statistics_screen.dart';
 import 'package:gift_ledger/services/config_service.dart';
 import 'package:gift_ledger/services/security_service.dart';
-import 'package:gift_ledger/services/update/app_build_info_service.dart';
-import 'package:gift_ledger/services/update/update_controller.dart';
-import 'package:gift_ledger/services/update/update_prompt_policy.dart';
-import 'package:gift_ledger/services/update/update_repository.dart';
 import 'package:gift_ledger/widgets/add_record/record_note_field.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class _NoopUpdateRepository implements UpdateRepository {
-  @override
-  String? get cachedManifestJson => null;
-
-  @override
-  Future<UpdateManifest> fetchManifest() {
-    throw UnimplementedError();
-  }
-}
-
-class _NoopBuildInfoService implements AppBuildInfoService {
-  const _NoopBuildInfoService();
-
-  @override
-  Future<AppBuildInfo> getCurrentBuildInfo() {
-    throw UnimplementedError();
-  }
-}
-
-class FakeUpdateController extends UpdateController {
-  FakeUpdateController({
-    UpdateState state = const UpdateState(),
-  })  : _fakeState = state,
-        super(
-          repository: _NoopUpdateRepository(),
-          appBuildInfoService: const _NoopBuildInfoService(),
-          configService: ConfigService(),
-        );
-
-  factory FakeUpdateController.idle() {
-    return FakeUpdateController(
-      state: const UpdateState(status: UpdateStateStatus.idle),
-    );
-  }
-
-  UpdateState _fakeState;
-
-  @override
-  UpdateState get state => _fakeState;
-
-  void emit(UpdateState state) {
-    _fakeState = state;
-    notifyListeners();
-  }
-
-  @override
-  Future<void> checkForUpdates({required UpdateCheckSource source}) async {}
-
-  @override
-  Future<void> markCurrentTargetPresented() async {}
-
-  @override
-  Future<void> ignoreCurrentTarget() async {}
-}
-
 class FakeSettingsStorageService {
   final List<VoidCallback> _listeners = [];
 
   void addListener(VoidCallback listener) => _listeners.add(listener);
-
   void removeListener(VoidCallback listener) => _listeners.remove(listener);
 
   Future<bool> getStatsIncludeEventBooks() async => true;
-
   Future<bool> getEventBooksEnabled() async => true;
-
   Future<void> setShowHomeAmounts(bool value) async {}
-
   Future<bool> getDefaultIsReceived() async => true;
-
   Future<void> setDefaultIsReceived(bool value) async {}
 }
 
 class FakeTemplateService {
   Future<bool> getUseFuzzyAmount() async => false;
-
   Future<void> setUseFuzzyAmount(bool value) async {}
 }
 
 class FakeNotificationService {
   Future<bool> isEnabled() async => false;
-
   Future<void> setEnabled(bool value) async {}
 }
 
 class FakeSettingsSecurityService {
   Future<String> getSecurityMode() async => SecurityService.modeNone;
-
   Future<bool> hasPin() async => true;
-
   Future<void> setPin(String pin) async {}
-
   Future<void> setSecurityMode(String mode) async {}
 }
 
@@ -129,13 +59,10 @@ class FakeStatisticsStorageService implements StatisticsStorage {
 
   @override
   void addListener(VoidCallback listener) => _listeners.add(listener);
-
   @override
   Future<List<Gift>> getAllGifts() async => gifts;
-
   @override
   Future<List<Guest>> getAllGuests() async => guests;
-
   @override
   void removeListener(VoidCallback listener) => _listeners.remove(listener);
 }
@@ -146,25 +73,20 @@ class RecordingAddRecordStorage implements AddRecordStorage {
 
   @override
   Future<List<Guest>> getAllGuests() async => const <Guest>[];
-
   @override
   Future<List<Gift>> getPendingReceipts() async => const <Gift>[];
-
   @override
   Future<List<Gift>> getUnreturnedGifts() async => const <Gift>[];
-
   @override
-  Future<void> saveGiftWithGuest(Gift gift, Guest guest) async {
+  Future<void> saveGiftWithGuest(Gift gift, Guest guest) {
     lastCreatedGift = gift;
     lastCreatedGuest = guest;
+    return Future.value();
   }
-
   @override
   Future<int> updateGift(Gift gift) async => 1;
-
   @override
   Future<int> updateGuest(Guest guest) async => 1;
-
   @override
   Future<int> updateReturnStatus(
     int giftId, {
@@ -187,16 +109,12 @@ class FakeRecordListStorageService implements RecordListStorage {
 
   @override
   void addListener(VoidCallback listener) => _listeners.add(listener);
-
   @override
   Future<int> deleteGift(int id) async => 1;
-
   @override
   Future<List<Gift>> getAllGifts() async => gifts;
-
   @override
   Future<List<Guest>> getAllGuests() async => guests;
-
   @override
   void removeListener(VoidCallback listener) => _listeners.remove(listener);
 }
@@ -215,22 +133,16 @@ class FakePendingListStorageService implements PendingListStorage {
 
   @override
   void addListener(VoidCallback listener) => _listeners.add(listener);
-
   @override
   Future<List<Guest>> getAllGuests() async => guests;
-
   @override
   Future<int> incrementRemindedCount(int giftId) async => 1;
-
   @override
   Future<List<Gift>> getPendingReceipts() async => pendingReceipts;
-
   @override
   Future<List<Gift>> getUnreturnedGifts() async => unreturnedGifts;
-
   @override
   void removeListener(VoidCallback listener) => _listeners.remove(listener);
-
   @override
   Future<int> updateReturnStatus(
     int giftId, {
@@ -242,7 +154,6 @@ class FakePendingListStorageService implements PendingListStorage {
 }
 
 Widget _buildMainNavigationTestApp({
-  required FakeUpdateController updateController,
   required FakeStatisticsStorageService statisticsStorage,
 }) {
   final dashboardGuest = Guest(id: 1, name: '张三', relationship: '朋友');
@@ -256,31 +167,28 @@ Widget _buildMainNavigationTestApp({
     note: '首页最近记录',
   );
 
-  return ChangeNotifierProvider<UpdateController>.value(
-    value: updateController,
-    child: MaterialApp(
-      home: MainNavigation(
-        screens: [
-          DashboardScreen(
-            previewData: DashboardPreviewData(
-              totalReceived: 520,
-              totalSent: 1314,
-              recentGifts: [dashboardGift],
-              guestMap: {1: dashboardGuest},
-              pendingCount: 2,
-              eventBooksEnabled: true,
-            ),
+  return MaterialApp(
+    home: MainNavigation(
+      screens: [
+        DashboardScreen(
+          previewData: DashboardPreviewData(
+            totalReceived: 520,
+            totalSent: 1314,
+            recentGifts: [dashboardGift],
+            guestMap: {1: dashboardGuest},
+            pendingCount: 2,
+            eventBooksEnabled: true,
           ),
-          StatisticsScreen(storageService: statisticsStorage),
-          SettingsScreen(
-            initialAppVersion: '1.3.2',
-            storageService: FakeSettingsStorageService(),
-            templateService: FakeTemplateService(),
-            notificationService: FakeNotificationService(),
-            securityService: FakeSettingsSecurityService(),
-          ),
-        ],
-      ),
+        ),
+        StatisticsScreen(storageService: statisticsStorage),
+        SettingsScreen(
+          initialAppVersion: '1.3.2',
+          storageService: FakeSettingsStorageService(),
+          templateService: FakeTemplateService(),
+          notificationService: FakeNotificationService(),
+          securityService: FakeSettingsSecurityService(),
+        ),
+      ],
     ),
   );
 }
@@ -334,7 +242,6 @@ void main() {
 
     await tester.pumpWidget(
       _buildMainNavigationTestApp(
-        updateController: FakeUpdateController.idle(),
         statisticsStorage: statisticsStorage,
       ),
     );

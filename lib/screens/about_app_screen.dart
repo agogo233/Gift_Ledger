@@ -1,19 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../models/update_target.dart';
-import '../services/update/update_controller.dart';
-import '../services/update/update_prompt_policy.dart';
-import '../services/update/update_ui_coordinator.dart';
 import '../theme/app_theme.dart';
 import '../widgets/custom_toast.dart';
-import '../widgets/update/update_channel_section.dart';
-import '../widgets/update/update_release_notes_section.dart';
-import '../widgets/update/update_settings_section.dart';
 
 class AboutAppScreen extends StatefulWidget {
   const AboutAppScreen({
@@ -37,66 +27,6 @@ class _AboutAppScreenState extends State<AboutAppScreen> {
         : '当前版本 v${widget.currentVersion}';
   }
 
-  Future<void> _handleManualUpdateCheck(UpdateController controller) async {
-    await controller.checkForUpdates(source: UpdateCheckSource.manual);
-    final state = controller.state;
-
-    if (state.status == UpdateStateStatus.unsupported) {
-      if (mounted) {
-        CustomToast.show(context, '当前 iOS 版本不支持应用内检查更新，请前往 GitHub 查看最新发布');
-      }
-      return;
-    }
-
-    if (state.status == UpdateStateStatus.error) {
-      if (mounted) {
-        CustomToast.show(context, '当前网络不可用，或暂时无法访问更新服务');
-      }
-      return;
-    }
-
-    if (state.target != null) {
-      scheduleManualUpdatePresentation(
-        controller: controller,
-        target: state.target!,
-        isMounted: () => mounted,
-        schedulePostFrame: WidgetsBinding.instance.addPostFrameCallback,
-        showMessage: (message) {
-          CustomToast.show(context, message);
-        },
-      );
-      return;
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    if (state.status == UpdateStateStatus.upToDate) {
-      CustomToast.show(context, '当前已是最新版本');
-    }
-  }
-
-  Future<void> _handleInstallCurrentUpdate(UpdateController controller) async {
-    final message = await installCurrentUpdateAndCollectMessage(controller);
-    if (!mounted || message == null || message.isEmpty) {
-      return;
-    }
-
-    CustomToast.show(context, message);
-  }
-
-  void _handleUpdateChannelChanged(UpdateController controller, bool enabled) {
-    controller.setSelectedChannel(
-      enabled ? UpdateChannel.beta : UpdateChannel.stable,
-    );
-    if (!mounted) {
-      return;
-    }
-
-    CustomToast.show(context, enabled ? '已切换到 Beta 通道' : '已切换到稳定通道');
-  }
-
   Future<void> _openGithub() async {
     await launchUrl(
       _githubUri,
@@ -106,15 +36,6 @@ class _AboutAppScreenState extends State<AboutAppScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isIos = Platform.isIOS;
-    final updateController = context.watch<UpdateController>();
-    final updateState = updateController.state;
-    final updateTarget = updateState.target;
-    final updateBusy = updateState.status == UpdateStateStatus.checking ||
-        updateState.status == UpdateStateStatus.permissionRequired ||
-        updateState.status == UpdateStateStatus.downloading ||
-        updateState.status == UpdateStateStatus.installing;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
@@ -124,71 +45,6 @@ class _AboutAppScreenState extends State<AboutAppScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           _AboutHeader(versionLabel: _versionLabel),
-          const SizedBox(height: 16),
-          if (isIos)
-            Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'iOS 版本说明',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '当前 iOS 版本不支持应用内检查更新。你可以前往 GitHub 查看最新发布，并下载未签名 IPA 后自行签名安装。',
-                    style: TextStyle(
-                      fontSize: 13,
-                      height: 1.5,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: _openGithub,
-                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                    label: const Text('前往 GitHub 查看发布'),
-                  ),
-                ],
-              ),
-            )
-          else
-            UpdateSettingsSection(
-              currentVersion: widget.currentVersion,
-              status: updateState.status,
-              lastSource: updateState.lastSource,
-              target: updateTarget,
-              onCheckPressed: () => _handleManualUpdateCheck(updateController),
-              onInstallPressed: () =>
-                  _handleInstallCurrentUpdate(updateController),
-              error: updateState.error,
-              installResult: updateState.installResult,
-              downloadProgress: updateState.downloadProgress,
-            ),
-          if (!isIos) ...[
-            const SizedBox(height: 12),
-            UpdateChannelSection(
-              selectedChannel: updateController.selectedChannel,
-              enabled: !updateBusy,
-              onBetaChanged: (enabled) {
-                _handleUpdateChannelChanged(updateController, enabled);
-              },
-            ),
-          ],
-          if (!isIos && (updateTarget?.notes.trim().isNotEmpty ?? false)) ...[
-            const SizedBox(height: 12),
-            UpdateReleaseNotesSection(notes: updateTarget!.notes),
-          ],
           const SizedBox(height: 12),
           Container(
             decoration: BoxDecoration(
@@ -297,6 +153,9 @@ class _AboutHeader extends StatelessWidget {
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: AppTheme.primaryColor.withValues(alpha: 0.12),
+              ),
             ),
             child: const Icon(
               Icons.card_giftcard_rounded,
