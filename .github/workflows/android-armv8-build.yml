@@ -1,0 +1,92 @@
+name: Build Android arm64-v8a
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Android arm64-v8a
+    runs-on: ubuntu-latest
+
+    env:
+      SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Decode release keystore
+        if: env.SIGNING_KEY_BASE64 != ''
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.SIGNING_KEY_BASE64 }}" | base64 -d > android/app/release.keystore
+          {
+            echo "storeFile=release.keystore"
+            echo "storePassword=${{ secrets.KEY_STORE_PASSWORD }}"
+            echo "keyAlias=${{ secrets.KEY_ALIAS }}"
+            echo "keyPassword=${{ secrets.KEY_PASSWORD }}"
+          } > android/app/key.properties
+
+      - name: Build Android split APK (arm64-v8a)
+        run: |
+          flutter build apk \
+            --release \
+            --split-per-abi \
+            --target-platform android-arm64
+
+      - name: Stage APK at workspace root
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import pathlib
+          import re
+
+          text = pathlib.Path("pubspec.yaml").read_text(encoding="utf-8")
+          match = re.search(r"^version:\s*(\S+)", text, re.M)
+          if not match:
+              raise SystemExit("version not found in pubspec.yaml")
+
+          full_version = match.group(1).strip()
+          semver, _, build = full_version.partition("+")
+          if not build:
+              build = "0"
+
+          src = pathlib.Path("build/app/outputs/flutter-apk/app-arm64-v8a-release.apk")
+          if not src.exists():
+              raise SystemExit(f"APK not found: {src}")
+
+          name = f"gift_ledger-android-v{semver}-build{build}-arm64-v8a.apk"
+          dst = pathlib.Path(name)
+          dst.write_bytes(src.read_bytes())
+          print(f"Staged {name} ({dst.stat().st_size} bytes)")
+          PY
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gift-ledger-android-arm64-v8a
+          path: gift_ledger-android-v*-arm64-v8a.apk
+          if-no-files-found: error

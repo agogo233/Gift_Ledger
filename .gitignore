@@ -52,6 +52,7 @@ tmpclaude-*
 nul
 android/local.properties
 android/key.properties
+android/app/key.properties
 **/*.keystore
 **/*.jks
 .env
