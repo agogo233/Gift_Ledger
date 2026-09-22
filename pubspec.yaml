@@ -29,6 +29,7 @@ dependencies:
   flutter_local_notifications: ^18.0.1  # 本地推送
   timezone: ^0.10.0             # 时区支持
   flutter_secure_storage: ^10.0.0
+  local_auth: ^2.3.0  # 生物识别（指纹/Face ID）解锁
   crypto: ^3.0.7
   web: ^0.5.1  # Web API 支持（IndexedDB）
   url_launcher: ^6.2.5

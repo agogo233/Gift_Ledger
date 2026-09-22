@@ -45,6 +45,8 @@
 		<true/>
 		<key>UIApplicationSupportsIndirectInputEvents</key>
 		<true/>
+		<key>NSFaceIDUsageDescription</key>
+		<string>用于快速解锁应用，保护您的礼金数据隐私</string>
 		<key>UIStatusBarHidden</key>
 		<false/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>

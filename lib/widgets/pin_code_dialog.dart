@@ -310,6 +310,17 @@ class _PinCodeDialogState extends State<PinCodeDialog> with SingleTickerProvider
     if (mounted) Navigator.pop(context, true);
   }
 
+  /// 指纹快捷解锁：成功则关闭对话框返回 true，失败/取消不改变 PIN 状态。
+  Future<void> _tryBiometricUnlock() async {
+    if (!await _securityService.isBiometricEnabled()) return;
+    if (!await _securityService.canUseBiometric()) return;
+    final ok = await _securityService.authenticate('请通过生物识别解锁随礼记');
+    if (ok) {
+      _securityService.unlock();
+      if (mounted) Navigator.pop(context, true);
+    }
+  }
+
   Future<void> _showForgotPassword() async {
     // 检查是否设置了提示问题
     final hasHint = await _securityService.hasSecurityHint();
@@ -506,20 +517,47 @@ class _PinCodeDialogState extends State<PinCodeDialog> with SingleTickerProvider
             );
           },
         ),
-        // 忘记密码按钮（仅在验证模式下显示）
+        // 忘记密码按钮 + 指纹快捷按钮（仅在验证模式下显示）
         if (!widget.isSettingPin && _mode == _DialogMode.enterPin) ...[
           const SizedBox(height: 16),
-          TextButton(
-            onPressed: _showForgotPassword,
-            child: Text(
-              '忘记密码？',
-              style: TextStyle(
-                color: AppTheme.primaryColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+          Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+              TextButton(
+                onPressed: _showForgotPassword,
+                child: Text(
+                  '忘记密码？',
+                  style: TextStyle(
+                    color: AppTheme.primaryColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 24),
+              // 指纹快捷解锁按钮
+              FutureBuilder<bool>(
+                future: Future.wait([
+                  _securityService.isBiometricEnabled(),
+                  _securityService.canUseBiometric(),
+                ]),
+                builder: (context, snapshot) {
+                  final enabled = snapshot.data?[0] == true;
+                  final available = snapshot.data?[1] == true;
+                  if (!enabled || !available) return const SizedBox();
+                  return IconButton(
+                    onPressed: _tryBiometricUnlock,
+                    icon: const Icon(Icons.fingerprint_rounded, size: 28),
+                    style: IconButton.styleFrom(
+                      foregroundColor: AppTheme.primaryColor,
+                    ),
+                    tooltip: '指纹解锁',
+                  );
+                },
+              ),
+            ],
           ),
+        ],
         ] else
           const SizedBox(height: 40),
         // 数字键盘

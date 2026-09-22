@@ -21,6 +21,11 @@
 -keep class androidx.security.crypto.** { *; }
 -dontwarn androidx.security.crypto.**
 
+# local_auth 生物识别规则
+-keep class io.flutter.plugins.localauth.** { *; }
+-keep class androidx.lifecycle.DefaultLifecycleObserver { *; }
+-dontwarn io.flutter.plugins.localauth.**
+
 # shared_preferences 规则
 -keep class io.flutter.plugins.sharedpreferences.** { *; }
 -keep class android.content.SharedPreferences { *; }

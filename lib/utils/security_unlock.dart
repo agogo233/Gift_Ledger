@@ -6,7 +6,7 @@ import '../widgets/pin_code_dialog.dart';
 /// UI 层的统一解锁入口：
 /// - 先确保 SecurityService 完成 init（避免冷启动/页面首次进入的竞态）
 /// - 无锁模式（modeNone）不应弹 PIN，直接解锁以恢复可见/可操作状态
-/// - 有锁模式下，如未解锁则弹 PIN 验证
+/// - 有锁模式下，如未解锁则优先走生物识别，失败/取消回落 PIN 验证
 ///
 /// 说明：这里刻意放在 utils（UI 可引用）而不是 services，避免服务层依赖 UI 组件。
 extension SecurityServiceUnlockUi on SecurityService {
@@ -24,8 +24,18 @@ extension SecurityServiceUnlockUi on SecurityService {
       return true;
     }
 
-    // 有锁模式：已经解锁则直接放行，否则弹出 PIN 验证。
+    // 有锁模式：已经解锁则直接放行。
     if (isUnlocked.value) return true;
+
+    // 优先尝试生物识别（便捷解锁）：成功即视为解锁，失败/取消回落 PIN。
+    if (await isBiometricEnabled() && await canUseBiometric()) {
+      final ok = await authenticate('请通过生物识别解锁随礼记');
+      if (ok) {
+        unlock();
+        return true;
+      }
+    }
+
     return PinCodeDialog.show(navigator.context);
   }
 }

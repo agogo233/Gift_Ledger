@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:crypto/crypto.dart';
+import 'package:local_auth/local_auth.dart';
 
 /// 安全服务 - 继承 ChangeNotifier 以支持 Provider 状态管理
 class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
@@ -29,6 +31,7 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
   static const _keyHintSalt = 'sec_hint_salt';          // 答案盐值
   static const _keyHintFailCount = 'sec_hint_fail_count';
   static const _keyHintLockUntil = 'sec_hint_lock_until';
+  static const _keyBiometricEnabled = 'sec_biometric_enabled'; // 指纹解锁开关
   // 后台超时自动上锁的阈值：30s（更符合“快速离开就锁”的安全预期）
   static const _lockTimeout = Duration(seconds: 30);
   static const int _maxAttempts = 5;
@@ -128,6 +131,49 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
     return mode;
   }
 
+  // --- 指纹/生物识别解锁 ---
+
+  /// 是否已开启指纹解锁
+  Future<bool> isBiometricEnabled() async {
+    final value = await _storage.read(key: _keyBiometricEnabled);
+    return value == 'true';
+  }
+
+  /// 当前设备是否支持生物识别（Web 恒为 false）
+  Future<bool> canUseBiometric() async {
+    if (kIsWeb) return false;
+    final auth = LocalAuthentication();
+    final canCheck = await auth.canCheckBiometrics;
+    if (canCheck) return true;
+    return auth.isDeviceSupported();
+  }
+
+  /// 调用系统生物识别，成功返回 true；取消/失败/异常均返回 false。
+  /// 不计入 PIN 失败计数，避免与现有阶梯锁定逻辑冲突。
+  Future<bool> authenticate(String reason) async {
+    if (kIsWeb) return false;
+    final auth = LocalAuthentication();
+    try {
+      final ok = await auth.authenticate(
+        localizedReason: reason,
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          stickyAuth: true,
+          sensitiveTransaction: true,
+        ),
+      );
+      return ok;
+    } catch (e) {
+      debugPrint('Biometric authenticate error: $e');
+      return false;
+    }
+  }
+
+  /// 设置指纹解锁开关（仅在有锁模式且已设 PIN 时由 UI 调用）
+  Future<void> setBiometricEnabled(bool value) async {
+    await _storage.write(key: _keyBiometricEnabled, value: value.toString());
+  }
+
   /// 获取剩余尝试次数
   Future<int> getRemainingAttempts() async {
     final countStr = await _storage.read(key: _keyFailCount) ?? '0';
@@ -189,6 +235,8 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
     if (mode == modeNone) {
       // 关闭安全锁时，只清除失败计数和锁定时间，保留密码和提示数据
       await clearLockout();
+      // 同时关闭指纹解锁：无锁模式下指纹无意义
+      await _storage.write(key: _keyBiometricEnabled, value: 'false');
       isUnlocked.value = true;
       notifyListeners();
     } else {
@@ -209,6 +257,7 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
     await _storage.delete(key: _keyHintAnswerHash);
     await _storage.delete(key: _keyHintFailCount);
     await _storage.delete(key: _keyHintLockUntil);
+    await _storage.delete(key: _keyBiometricEnabled);
   }
 
   /// 验证密码
@@ -362,6 +411,8 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
     await _storage.delete(key: _keyLockoutRound);
     // 重置安全模式为无锁
     await _storage.write(key: _keyMode, value: modeNone);
+    // 无锁模式下指纹无意义，一并关闭
+    await _storage.write(key: _keyBiometricEnabled, value: 'false');
     isUnlocked.value = true;
     notifyListeners();
   }

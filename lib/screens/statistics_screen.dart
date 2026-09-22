@@ -73,6 +73,9 @@ class StatisticsScreenState extends State<StatisticsScreen> {
   // 智能洞察数据
   List<InsightData> _insights = const [];
 
+  // 图谱模式：按记录 / 按联系人
+  bool _usePersonMode = false;
+
   @override
   void initState() {
     super.initState();
@@ -460,6 +463,14 @@ class StatisticsScreenState extends State<StatisticsScreen> {
     final gifts = _filteredGifts;
     if (gifts.isEmpty) return const SizedBox();
 
+    // 按人聚合数据（仅在人模式时使用，避免不必要的计算）
+    final personGraph = _usePersonMode
+        ? _statisticsComputationService.buildPersonGraph(
+            gifts: gifts,
+            guestMap: _guestMap,
+          )
+        : null;
+
     return Container(
       margin: const EdgeInsets.only(top: AppTheme.spacingM),
       padding: const EdgeInsets.all(20), // 添加内边距防止溢出
@@ -474,15 +485,75 @@ class StatisticsScreenState extends State<StatisticsScreen> {
           ),
         ],
       ),
-      child: OrbitMap(
-        category: _selectedCategory!,
-        gifts: gifts,
-        guestMap: _guestMap,
-        onClose: () {
-          setState(() {
-            _selectedCategory = null;
-          });
-        },
+      child: Column(
+        children: [
+          // 记录/人 切换
+          _buildGraphModeToggle(),
+          const SizedBox(height: 12),
+          OrbitMap(
+            category: _selectedCategory!,
+            gifts: gifts,
+            guestMap: _guestMap,
+            mode: _usePersonMode ? OrbitMapMode.byPerson : OrbitMapMode.byRecord,
+            personGraph: personGraph,
+            onClose: () {
+              setState(() {
+                _selectedCategory = null;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 记录/人 图谱模式切换
+  Widget _buildGraphModeToggle() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildModeOption(
+            label: '按记录',
+            isSelected: !_usePersonMode,
+            onTap: () => setState(() => _usePersonMode = false),
+          ),
+          _buildModeOption(
+            label: '按联系人',
+            isSelected: _usePersonMode,
+            onTap: () => setState(() => _usePersonMode = true),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModeOption({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryColor : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : Colors.white70,
+          ),
+        ),
       ),
     );
   }

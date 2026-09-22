@@ -40,6 +40,7 @@ class SettingsScreenState extends State<SettingsScreen> {
   bool _statsIncludeEventBooks = true;
   bool _eventBooksEnabled = true;
   String _securityMode = SecurityService.modeNone;
+  bool _biometricEnabled = false;
   String _appVersion = '';
   late final dynamic _templateService;
   late final dynamic _notificationService;
@@ -103,6 +104,8 @@ class SettingsScreenState extends State<SettingsScreen> {
     final Future<bool> eventBooksEnabledFuture = _db.getEventBooksEnabled();
     final Future<String> securityModeFuture =
         _securityService.getSecurityMode();
+    final Future<bool> biometricEnabledFuture =
+        _securityService.isBiometricEnabled();
 
     final results = await Future.wait<dynamic>([
       defaultIsReceivedFuture,
@@ -111,6 +114,7 @@ class SettingsScreenState extends State<SettingsScreen> {
       statsIncludeEventBooksFuture,
       eventBooksEnabledFuture,
       securityModeFuture,
+      biometricEnabledFuture,
     ]);
 
     if (mounted) {
@@ -121,6 +125,7 @@ class SettingsScreenState extends State<SettingsScreen> {
         _statsIncludeEventBooks = results[3] as bool;
         _eventBooksEnabled = results[4] as bool;
         _securityMode = results[5] as String;
+        _biometricEnabled = results[6] as bool;
       });
     }
   }
@@ -201,6 +206,43 @@ class SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /// 构建指纹解锁开关（仅在有锁模式下显示，不支持的设备置灰提示）
+  Widget _buildBiometricSwitchTile() {
+    return FutureBuilder<bool>(
+      future: _securityService.canUseBiometric(),
+      builder: (context, snapshot) {
+        final available = snapshot.data == true;
+        return _buildSwitchTile(
+          icon: Icons.fingerprint_rounded,
+          iconColor: available ? AppTheme.primaryColor : Colors.grey,
+          title: '指纹解锁',
+          subtitle: available
+              ? '解锁时优先使用生物识别，失败可回退PIN'
+              : '当前设备不支持生物识别',
+          value: _biometricEnabled,
+          onChanged: available
+              ? (v) async {
+                  if (v) {
+                    // 开启前必须先验证 PIN，确保本人操作
+                    final verified = await PinCodeDialog.show(context);
+                    if (!verified) return;
+                  }
+                  await _securityService.setBiometricEnabled(v);
+                  if (!mounted) return;
+                  setState(() {
+                    _biometricEnabled = v;
+                  });
+                  CustomToast.show(
+                    context,
+                    v ? '已开启指纹解锁' : '已关闭指纹解锁',
+                  );
+                }
+              : null,
+        );
+      },
+    );
+  }
+
   /// 公开刷新方法，供控制器调用
   void refreshData() {
     _loadSettings();
@@ -277,6 +319,8 @@ class SettingsScreenState extends State<SettingsScreen> {
                             subtitle: '重置您的6位PIN码',
                             onTap: _changePassword,
                           ),
+                          const Divider(height: 1, indent: 52),
+                          _buildBiometricSwitchTile(),
                         ],
                       ],
                     ),
@@ -403,7 +447,7 @@ class SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-// 关于
+                    // 关于
                     _buildSectionCard(
                       title: '关于',
                       children: [

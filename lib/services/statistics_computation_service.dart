@@ -184,4 +184,92 @@ class StatisticsComputationService {
 
     return insights;
   }
+
+  // --- 关联图谱：按人聚合 ---
+
+  /// 单人在图谱中的聚合数据
+  class PersonGraphData {
+    const PersonGraphData({
+      required this.guestId,
+      required this.name,
+      required this.relationship,
+      required this.totalReceived,
+      required this.totalSent,
+      required this.count,
+      required this.latestDate,
+    });
+
+    final int guestId;
+    final String name;
+    final String relationship;
+    final double totalReceived;
+    final double totalSent;
+    final int count;
+    final DateTime latestDate;
+
+    /// 净流入（收 - 送），用于内外圈布局
+    double get netFlow => totalReceived - totalSent;
+  }
+
+  /// 按联系人聚合礼金记录，按总额倒序取 Top N。
+  /// 已删除/未知联系人的记录归入 name='未知客人'，避免空解引用。
+  List<PersonGraphData> buildPersonGraph({
+    required List<Gift> gifts,
+    required Map<int, Guest> guestMap,
+    int maxNodes = 12,
+  }) {
+    if (gifts.isEmpty) return const [];
+
+    final aggregated = <int, PersonGraphData>{};
+    for (final gift in gifts) {
+      final guest = guestMap[gift.guestId];
+      final name = guest?.name ?? '未知客人';
+      final relationship = guest?.relationship ?? '其他';
+      final existing = aggregated[gift.guestId];
+      final entry = existing == null
+          ? PersonGraphData(
+              guestId: gift.guestId,
+              name: name,
+              relationship: relationship,
+              totalReceived: 0,
+              totalSent: 0,
+              count: 0,
+              latestDate: gift.date,
+            )
+          : existing;
+      final newLatest = gift.date.isAfter(entry.latestDate)
+          ? gift.date
+          : entry.latestDate;
+      if (gift.isReceived) {
+        aggregated[gift.guestId] = PersonGraphData(
+          guestId: entry.guestId,
+          name: entry.name,
+          relationship: entry.relationship,
+          totalReceived: entry.totalReceived + gift.amount,
+          totalSent: entry.totalSent,
+          count: entry.count + 1,
+          latestDate: newLatest,
+        );
+      } else {
+        aggregated[gift.guestId] = PersonGraphData(
+          guestId: entry.guestId,
+          name: entry.name,
+          relationship: entry.relationship,
+          totalReceived: entry.totalReceived,
+          totalSent: entry.totalSent + gift.amount,
+          count: entry.count + 1,
+          latestDate: newLatest,
+        );
+      }
+    }
+
+    final list = aggregated.values.toList()
+      ..sort((a, b) {
+        final totalA = a.totalReceived + a.totalSent;
+        final totalB = b.totalReceived + b.totalSent;
+        return totalB.compareTo(totalA);
+      });
+    if (list.length <= maxNodes) return list;
+    return list.take(maxNodes).toList();
+  }
 }

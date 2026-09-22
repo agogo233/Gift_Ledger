@@ -1,16 +1,24 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/gift.dart';
+import '../models/guest.dart';
+import '../services/statistics_computation_service.dart';
 import '../theme/app_theme.dart';
 import 'privacy_aware_text.dart';
 
-import '../models/guest.dart';
+/// 图谱展示模式
+enum OrbitMapMode {
+  byRecord, // 按单条记录布点（默认，兼容旧版）
+  byPerson, // 按联系人聚合布点
+}
 
 class OrbitMap extends StatefulWidget {
   final String category;
   final List<Gift> gifts;
   final Map<int, Guest> guestMap;
   final VoidCallback onClose;
+  final OrbitMapMode mode;
+  final List<PersonGraphData>? personGraph;
 
   const OrbitMap({
     super.key,
@@ -18,6 +26,8 @@ class OrbitMap extends StatefulWidget {
     required this.gifts,
     required this.guestMap,
     required this.onClose,
+    this.mode = OrbitMapMode.byRecord,
+    this.personGraph,
   });
 
   @override
@@ -67,7 +77,13 @@ class _OrbitMapState extends State<OrbitMap> with SingleTickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     // 计算总流动金额 (received + given)
-    double flowAmount = widget.gifts.fold(0, (sum, g) => sum + g.amount);
+    final isPersonMode = widget.mode == OrbitMapMode.byPerson;
+    final displayPersons = isPersonMode ? (widget.personGraph ?? const []) : const <PersonGraphData>[];
+    final displayGifts = isPersonMode ? const <Gift>[] : widget.gifts;
+    final int nodeCount = isPersonMode ? displayPersons.length : displayGifts.length;
+    final double flowAmount = isPersonMode
+        ? displayPersons.fold(0, (sum, p) => sum + p.totalReceived + p.totalSent)
+        : widget.gifts.fold(0, (sum, g) => sum + g.amount);
 
     // 使用 TickerMode 控制动画，当组件不可见时自动停止
     return TickerMode(
@@ -102,6 +118,8 @@ class _OrbitMapState extends State<OrbitMap> with SingleTickerProviderStateMixin
               size: const Size(400, 400),
               painter: OrbitLinesPainter(
                 gifts: widget.gifts,
+                persons: widget.personGraph,
+                mode: widget.mode,
                 centerColor: AppTheme.primaryColor,
               ),
             ),
@@ -199,148 +217,170 @@ class _OrbitMapState extends State<OrbitMap> with SingleTickerProviderStateMixin
                 ),
               ),
               const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '共 ${widget.gifts.length} 条记录',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
+Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    isPersonMode ? '共 $nodeCount 位联系人' : '共 ${widget.gifts.length} 条记录',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
 
           // 卫星节点 (Satellites) - 限制最多显示 12 个
           ...(() {
             final maxNodes = 12;
-            final displayGifts = widget.gifts.take(maxNodes).toList();
-            final displayCount = displayGifts.length;
-            
+            final isPersonMode = widget.mode == OrbitMapMode.byPerson;
+            final displayPersons = isPersonMode
+                ? (widget.personGraph ?? const []).take(maxNodes).toList()
+                : const <PersonGraphData>[];
+            final displayGifts = isPersonMode ? const <Gift>[] : widget.gifts.take(maxNodes).toList();
+            final displayCount = isPersonMode ? displayPersons.length : displayGifts.length;
+
             return List.generate(displayCount, (index) {
-              final gift = displayGifts[index];
               final angle = (index * (360 / displayCount)) * (math.pi / 180);
-              final radius = gift.isReceived ? 80.0 : 120.0; // 收礼内圈，送礼外圈
+              final isSelected = _activeNodeIndex == index;
+
+              // 根据模式确定节点数据
+              final bool isReceived;
+              final double amount;
+              final String name;
+              final String tooltip;
+              if (isPersonMode) {
+                final person = displayPersons[index];
+                isReceived = person.netFlow >= 0;
+                amount = person.totalReceived + person.totalSent;
+                name = person.name;
+                tooltip = '${person.name} · ${person.relationship} · ${person.count}笔';
+              } else {
+                final gift = displayGifts[index];
+                isReceived = gift.isReceived;
+                amount = gift.amount;
+                name = widget.guestMap[gift.guestId]?.name ?? '未知客人';
+                tooltip = '${gift.date.month}/${gift.date.day} · ${gift.note ?? '记录'}';
+              }
+
+              final radius = isReceived ? 80.0 : 120.0; // 收礼内圈，送礼外圈
               final x = math.cos(angle) * radius;
               final y = math.sin(angle) * radius;
-              final isSelected = _activeNodeIndex == index;
-              
-              final color = gift.isReceived 
+              final color = isReceived
                   ? const Color(0xFF6366F1) // Indigo
                   : const Color(0xFFF43F5E); // Rose
 
-            return Positioned(
-              // Center is at 225, 225 (half of 450)
-              // But strictly speaking in Stack alignment center, we use translation
-              child: Transform.translate(
-                offset: Offset(x, y),
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _activeNodeIndex = isSelected ? null : index;
-                    });
-                  },
-                  child: AnimatedScale(
-                    scale: isSelected ? 1.25 : 1.0,
-                    duration: const Duration(milliseconds: 300),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Tooltip (Top)
-                        AnimatedOpacity(
-                          opacity: isSelected ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              return Positioned(
+                child: Transform.translate(
+                  offset: Offset(x, y),
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _activeNodeIndex = isSelected ? null : index;
+                      });
+                    },
+                    child: AnimatedScale(
+                      scale: isSelected ? 1.25 : 1.0,
+                      duration: const Duration(milliseconds: 300),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Tooltip (Top)
+                          AnimatedOpacity(
+                            opacity: isSelected ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.2),
+                                    blurRadius: 10,
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                tooltip,
+                                style: const TextStyle(
+                                  color: Colors.black87,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Node Icon
+                          Container(
+                            width: 40,
+                            height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
+                              color: isReceived
+                                  ? const Color(0xFF1E1B4B) // Indigo 950
+                                  : const Color(0xFF4C0519), // Rose 950
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: color,
+                                width: 2,
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.2),
+                                  color: color.withValues(alpha: 0.2),
                                   blurRadius: 10,
                                 ),
                               ],
                             ),
-                            child: Text(
-                              '${gift.date.month}/${gift.date.day} · ${gift.note ?? '记录'}',
-                              style: const TextStyle(
-                                color: Colors.black87,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
+                            child: Icon(
+                              Icons.person_outline_rounded,
+                              color: color.withValues(alpha: 0.8),
+                              size: 20,
+                            ),
+                          ),
+                          // Info Text (Bottom)
+                          AnimatedOpacity(
+                            opacity: isSelected ? 1.0 : 0.6,
+                            duration: const Duration(milliseconds: 300),
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    name,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  PrivacyAwareText(
+                                    '¥${amount.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      color: color,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                        ),
-                        // Node Icon
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: gift.isReceived 
-                                ? const Color(0xFF1E1B4B) // Indigo 950
-                                : const Color(0xFF4C0519), // Rose 950
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: color,
-                              width: 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: color.withValues(alpha: 0.2),
-                                blurRadius: 10,
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.person_outline_rounded,
-                            color: color.withValues(alpha: 0.8),
-                            size: 20,
-                          ),
-                        ),
-                        // Info Text (Bottom)
-                        AnimatedOpacity(
-                          opacity: isSelected ? 1.0 : 0.6,
-                          duration: const Duration(milliseconds: 300),
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Column(
-                              children: [
-                                Text(
-                                  widget.guestMap[gift.guestId]?.name ?? '未知客人',
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                                PrivacyAwareText(
-                                  '¥${gift.amount.toStringAsFixed(0)}',
-                                  style: TextStyle(
-                                    color: color,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          });
-        })(),
+              );
+            });
+          })(),
         ],
       ),
     ),
@@ -350,48 +390,48 @@ class _OrbitMapState extends State<OrbitMap> with SingleTickerProviderStateMixin
 
 class OrbitLinesPainter extends CustomPainter {
   final List<Gift> gifts;
+  final List<PersonGraphData>? persons;
+  final OrbitMapMode mode;
   final Color centerColor;
 
   OrbitLinesPainter({
     required this.gifts,
+    this.persons,
+    required this.mode,
     required this.centerColor,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    
+
+    final isPersonMode = mode == OrbitMapMode.byPerson;
+    final displayPersons = isPersonMode ? (persons ?? const []) : const <PersonGraphData>[];
+    final displayGifts = isPersonMode ? const <Gift>[] : gifts;
     final maxNodes = 12;
-    final displayCount = gifts.length > maxNodes ? maxNodes : gifts.length;
+    final displayCount = isPersonMode
+        ? (displayPersons.length > maxNodes ? maxNodes : displayPersons.length)
+        : (displayGifts.length > maxNodes ? maxNodes : displayGifts.length);
 
     for (var i = 0; i < displayCount; i++) {
-      final gift = gifts[i];
       final angle = (i * (360 / displayCount)) * (math.pi / 180);
-      final radius = gift.isReceived ? 80.0 : 120.0;
-      
+      final bool isReceived;
+      if (isPersonMode) {
+        isReceived = displayPersons[i].netFlow >= 0;
+      } else {
+        isReceived = displayGifts[i].isReceived;
+      }
+      final radius = isReceived ? 80.0 : 120.0;
+
       // Calculate end point (center of the node)
       final endX = center.dx + math.cos(angle) * radius;
       final endY = center.dy + math.sin(angle) * radius;
-      
+
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.0;
-      
-      // Gradient line
-      final rect = Rect.fromPoints(center, Offset(endX, endY));
-      paint.shader = LinearGradient(
-        colors: [
-           gift.isReceived ? const Color(0xFF6366F1) : const Color(0xFFF43F5E).withValues(alpha: 0.3),
-           Colors.transparent,
-        ],
-        stops: const [0.0, 1.0],
-        begin: Alignment.centerLeft, // This needs adjustment based on angle, but simple gradient works ok for radial feel if tailored
-        // Alternatively, use a radial gradient or just simple color transition
-      ).createShader(rect);
 
-      // Simple solid line with opacity for now better visual control
-      paint.shader = null;
-      paint.color = gift.isReceived 
+      paint.color = isReceived
           ? const Color(0xFF6366F1).withValues(alpha: 0.3)
           : const Color(0xFFF43F5E).withValues(alpha: 0.15);
 
@@ -401,6 +441,8 @@ class OrbitLinesPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant OrbitLinesPainter oldDelegate) {
-     return oldDelegate.gifts != gifts;
+    return oldDelegate.gifts != gifts ||
+        oldDelegate.persons != persons ||
+        oldDelegate.mode != mode;
   }
 }
