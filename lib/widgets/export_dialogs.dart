@@ -7,6 +7,9 @@ class ExportDialogs {
   static final ExportService _exportService = ExportService();
 
   static void showExportOptions(BuildContext context) {
+    // 保存稳定的scaffold context，在整个导出流程中使用
+    final scaffoldContext = context;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -36,7 +39,7 @@ class ExportDialogs {
               subtitle: '完整备份所有数据，适合迁移设备',
               onTap: () async {
                 Navigator.pop(context);
-                await _performExport(context, 'JSON', () => _exportService.exportToJson());
+                await _performExport(scaffoldContext, 'JSON', () => _exportService.exportToJson());
               },
             ),
             _buildOptionTile(
@@ -46,7 +49,7 @@ class ExportDialogs {
               subtitle: '生成表格文件，便于在电脑查看编辑',
               onTap: () async {
                 Navigator.pop(context);
-                await _performExport(context, 'Excel', () => _exportService.exportToExcel());
+                await _performExport(scaffoldContext, 'Excel', () => _exportService.exportToExcel());
               },
             ),
             const SizedBox(height: AppTheme.spacingL),
