@@ -647,6 +647,31 @@ class _RecordListScreenState extends State<RecordListScreen>
                         context,
                         MaterialPageRoute(
                           builder: (context) => AddRecordScreen(
+                              copyGift: gift, copyGuest: guest),
+                        ),
+                      );
+                      if (result == true) {
+                        _loadData();
+                      }
+                    },
+                    icon: const Icon(Icons.copy_all),
+                    label: const Text('复制'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 12),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AddRecordScreen(
                               editingGift: gift, editingGuest: guest),
                         ),
                       );
@@ -657,11 +682,13 @@ class _RecordListScreenState extends State<RecordListScreen>
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('编辑'),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 12),
+                      visualDensity: VisualDensity.compact,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton.icon(
                     onPressed: () {
@@ -672,7 +699,9 @@ class _RecordListScreenState extends State<RecordListScreen>
                     label: const Text('删除'),
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.red,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 12),
+                      visualDensity: VisualDensity.compact,
                     ),
                   ),
                 ),

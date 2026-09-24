@@ -75,6 +75,8 @@ class AddRecordScreen extends StatefulWidget {
   final bool? prefillIsReceived;
   final int? relatedGiftId; // 关联的原记录ID
   final int? initialEventBookId; // 初始活动簿ID
+  final Gift? copyGift; // 复制来源记录（新建时预填）
+  final Guest? copyGuest; // 复制来源宾客
   final AddRecordStorage? storageService;
 
   const AddRecordScreen({
@@ -88,6 +90,8 @@ class AddRecordScreen extends StatefulWidget {
     this.prefillIsReceived,
     this.relatedGiftId,
     this.initialEventBookId,
+    this.copyGift,
+    this.copyGuest,
     this.storageService,
   });
 
@@ -130,6 +134,9 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
     // 如果是编辑模式，初始化数据
     if (widget.editingGift != null) {
       _initializeEditMode();
+    } else if (widget.copyGift != null) {
+      // 复制模式：预填来源记录数据，保存时创建新记录
+      _initializeCopyMode();
     } else if (widget.prefillGuestName != null ||
         widget.prefillAmount != null) {
       // 预填模式（从清单页跳转）
@@ -156,10 +163,8 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
     });
   }
 
-  void _initializeEditMode() {
-    final gift = widget.editingGift!;
-    final guest = widget.editingGuest;
-
+  /// 从 Gift/Guest 预填表单数据（编辑与复制共用，避免两处漂移）
+  void _fillFormFromGift(Gift gift, Guest? guest) {
     setState(() {
       _amount = gift.amount.toStringAsFixed(0);
       _isReceived = gift.isReceived;
@@ -175,6 +180,14 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
         _relationship = guest.relationship;
       }
     });
+  }
+
+  void _initializeEditMode() {
+    _fillFormFromGift(widget.editingGift!, widget.editingGuest);
+  }
+
+  void _initializeCopyMode() {
+    _fillFormFromGift(widget.copyGift!, widget.copyGuest);
   }
 
   void _onFocusChanged() {
@@ -194,8 +207,10 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
   }
 
   Future<void> _loadSettings() async {
-    // 编辑/预填模式下，避免默认设置异步覆盖用户意图
-    if (widget.editingGift != null || widget.prefillIsReceived != null) return;
+    // 编辑/复制/预填模式下，避免默认设置异步覆盖用户意图
+    if (widget.editingGift != null ||
+        widget.copyGift != null ||
+        widget.prefillIsReceived != null) return;
 
     final defaultIsReceived = await AppSettingsService().getDefaultIsReceived();
     if (!mounted) return;
@@ -561,10 +576,10 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
         }
       } else {
         // 新增模式：创建新记录
-        final guest = Guest(
-          name: name,
-          relationship: _relationship,
-        );
+        // 复制模式：从来源宾客继承 phone/note，与编辑行为保持一致
+        final guest = (widget.copyGuest ??
+                Guest(name: name, relationship: _relationship))
+            .copyWith(name: name, relationship: _relationship);
 
         final gift = Gift(
           guestId: 0,

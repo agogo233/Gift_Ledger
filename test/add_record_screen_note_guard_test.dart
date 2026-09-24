@@ -309,4 +309,69 @@ void main() {
     expect(fakeDb.lastUpdatedGuest?.note, '重要宾客');
     await tester.pump(const Duration(seconds: 2));
   });
+
+  testWidgets('AddRecordScreen 复制模式预填来源记录数据并保存为新记录',
+      (WidgetTester tester) async {
+    final sourceGift = Gift(
+      id: 1,
+      guestId: 1,
+      amount: 520,
+      isReceived: false,
+      eventType: EventTypes.birthday,
+      eventBookId: 7,
+      date: DateTime(2026, 4, 10),
+      note: '复制来源备注',
+      relatedRecordId: 99,
+      isReturned: true,
+      returnDueDate: DateTime(2026, 9, 20),
+      remindedCount: 2,
+    );
+    final sourceGuest = Guest(
+      id: 1,
+      name: '李四',
+      relationship: RelationshipTypes.colleague,
+    );
+    final fakeDb = RecordingStorageService();
+
+    await tester.pumpWidget(
+      buildTestApp(
+        child: AddRecordScreen(
+          copyGift: sourceGift,
+          copyGuest: sourceGuest,
+          storageService: fakeDb,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 验证表单预填
+    expect(find.widgetWithText(TextField, '李四'), findsOneWidget);
+    expect(find.text('520'), findsOneWidget);
+    expect(find.text('送礼'), findsOneWidget);
+    expect(find.text('生日'), findsOneWidget);
+    expect(find.text('同事'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '复制来源备注'), findsOneWidget);
+
+    // 保存
+    await tester.tap(find.text('保存记录'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认写入'));
+    await tester.pumpAndSettle();
+
+    // 验证走新增分支（saveGiftWithGuest），未修改原记录
+    expect(fakeDb.lastCreatedGift, isNotNull);
+    expect(fakeDb.lastUpdatedGift, isNull);
+    expect(fakeDb.lastCreatedGuest?.name, '李四');
+    expect(fakeDb.lastCreatedGuest?.relationship, RelationshipTypes.colleague);
+    expect(fakeDb.lastCreatedGift?.amount, 520);
+    expect(fakeDb.lastCreatedGift?.isReceived, false);
+    expect(fakeDb.lastCreatedGift?.eventType, EventTypes.birthday);
+    expect(fakeDb.lastCreatedGift?.eventBookId, 7);
+    expect(fakeDb.lastCreatedGift?.date, DateTime(2026, 4, 10));
+    expect(fakeDb.lastCreatedGift?.note, '复制来源备注');
+    // 复制不应携带原记录的关联/还礼状态
+    expect(fakeDb.lastCreatedGift?.relatedRecordId, isNull);
+    expect(fakeDb.lastCreatedGift?.isReturned, false);
+    await tester.pump(const Duration(seconds: 2));
+  });
 }
