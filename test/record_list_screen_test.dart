@@ -62,4 +62,51 @@ void main() {
     expect(find.text('全部记录页的备注摘要'), findsOneWidget);
     expect(find.byType(RecordSummaryCard), findsOneWidget);
   });
+
+  testWidgets('RecordListScreen 收礼筛选下搜索不会混入送礼记录',
+      (WidgetTester tester) async {
+    final storage = FakeRecordListStorageService(
+      gifts: [
+        Gift(
+          id: 1,
+          guestId: 1,
+          amount: 300,
+          isReceived: true,
+          eventType: EventTypes.wedding,
+          date: DateTime(2026, 3, 24),
+        ),
+        Gift(
+          id: 2,
+          guestId: 2,
+          amount: 500,
+          isReceived: false,
+          eventType: EventTypes.wedding,
+          date: DateTime(2026, 3, 25),
+        ),
+      ],
+      guests: [
+        Guest(id: 1, name: '张三', relationship: '朋友'),
+        Guest(id: 2, name: '张三', relationship: '朋友'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecordListScreen(isReceived: true, storageService: storage),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 笔记录'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, '搜索姓名'),
+      '张三',
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 笔记录'), findsOneWidget);
+    expect(find.text('2 笔记录'), findsNothing);
+  });
 }

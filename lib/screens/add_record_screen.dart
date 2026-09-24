@@ -525,15 +525,20 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
     try {
       // 编辑模式：更新现有记录
       if (widget.editingGift != null) {
+        final editingGift = widget.editingGift!;
         final giftToUpdate = Gift(
-          id: widget.editingGift!.id,
-          guestId: widget.editingGift!.guestId,
+          id: editingGift.id,
+          guestId: editingGift.guestId,
           amount: amount,
           isReceived: _isReceived,
           eventType: _eventType,
           eventBookId: _eventBookId,
           date: _selectedDate,
           note: savedNote,
+          relatedRecordId: editingGift.relatedRecordId,
+          isReturned: editingGift.isReturned,
+          returnDueDate: editingGift.returnDueDate,
+          remindedCount: editingGift.remindedCount,
         );
 
         await _db.updateGift(giftToUpdate);
@@ -542,8 +547,7 @@ class _AddRecordScreenState extends State<AddRecordScreen> {
         if (widget.editingGuest != null) {
           if (widget.editingGuest!.name != name ||
               widget.editingGuest!.relationship != _relationship) {
-            final guestToUpdate = Guest(
-              id: widget.editingGuest!.id,
+            final guestToUpdate = widget.editingGuest!.copyWith(
               name: name,
               relationship: _relationship,
             );

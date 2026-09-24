@@ -56,7 +56,7 @@ flutter build appbundle --release
 
 ### 发布产物命名约定
 
-GitHub Actions `publish-updates.yml` 会产出：
+GitHub Actions `publish-updates.yml`（当前已停用，见下文「工作流」）会产出：
 
 - `gift_ledger-<channel>-android-v<version>-build<build>-armeabi-v7a.apk`
 - `gift_ledger-<channel>-android-v<version>-build<build>-arm64-v8a.apk`
@@ -103,11 +103,16 @@ https://raw.githubusercontent.com/final00000000/Gift_Ledger/master/releases/upda
 
 ### 工作流
 
+当前仓库中唯一启用的 GitHub Actions 工作流：
+
 ```text
-.github/workflows/publish-updates.yml
+.github/workflows/android-armv8-build.yml
 ```
 
-职责：
+职责：构建 Android Release 包（仅 `arm64-v8a`）。
+
+完整发布链路 `.github/workflows/publish-updates.yml` 当前已停用（保留为 `publish-updates.yml.bak`），
+其原本承担、目前需手动完成的职责：
 
 1. 构建 Android split APK（仅 `armeabi-v7a` / `arm64-v8a`）
 2. 构建 Windows 安装器
@@ -151,6 +156,8 @@ flutter build ios --release --no-codesign
 ```text
 .github/workflows/ios_build.yml
 ```
+
+该工作流当前已停用（保留为 `ios_build.yml.bak`），IPA 构建需手动执行。
 
 说明：
 

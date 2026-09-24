@@ -241,4 +241,72 @@ void main() {
     expect(fakeDb.lastCreatedGift?.note, isNull);
     await tester.pump(const Duration(seconds: 2));
   });
+
+  testWidgets('AddRecordScreen 编辑时保留关联记录、还礼状态、提醒次数与提醒时间',
+      (WidgetTester tester) async {
+    final returnDueDate = DateTime(2026, 9, 20);
+    final fakeDb = RecordingStorageService();
+
+    await tester.pumpWidget(
+      buildTestApp(
+        child: AddRecordScreen(
+          editingGift: fakeGift().copyWith(
+            relatedRecordId: 99,
+            isReturned: true,
+            returnDueDate: returnDueDate,
+            remindedCount: 2,
+          ),
+          editingGuest: fakeGuest(),
+          storageService: fakeDb,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('保存记录'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认写入'));
+    await tester.pumpAndSettle();
+
+    expect(fakeDb.lastUpdatedGift?.relatedRecordId, 99);
+    expect(fakeDb.lastUpdatedGift?.isReturned, true);
+    expect(fakeDb.lastUpdatedGift?.returnDueDate, returnDueDate);
+    expect(fakeDb.lastUpdatedGift?.remindedCount, 2);
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('AddRecordScreen 修改宾客姓名时保留电话与备注',
+      (WidgetTester tester) async {
+    final fakeDb = RecordingStorageService();
+
+    await tester.pumpWidget(
+      buildTestApp(
+        child: AddRecordScreen(
+          editingGift: fakeGift(),
+          editingGuest: fakeGuest().copyWith(
+            phone: '13800000000',
+            note: '重要宾客',
+          ),
+          storageService: fakeDb,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.widgetWithText(TextField, '联系人姓名'),
+      '李四',
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('保存记录'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认写入'));
+    await tester.pumpAndSettle();
+
+    expect(fakeDb.lastUpdatedGuest?.name, '李四');
+    expect(fakeDb.lastUpdatedGuest?.phone, '13800000000');
+    expect(fakeDb.lastUpdatedGuest?.note, '重要宾客');
+    await tester.pump(const Duration(seconds: 2));
+  });
 }

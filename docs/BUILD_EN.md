@@ -47,7 +47,7 @@ Outputs:
 
 ### Release artifact naming
 
-`publish-updates.yml` publishes:
+`publish-updates.yml` (currently disabled, see "Workflow" below) publishes:
 
 - `gift_ledger-<channel>-android-v<version>-build<build>-armeabi-v7a.apk`
 - `gift_ledger-<channel>-android-v<version>-build<build>-arm64-v8a.apk`
@@ -82,11 +82,16 @@ https://raw.githubusercontent.com/final00000000/Gift_Ledger/master/releases/upda
 
 Workflow:
 
+The only active GitHub Actions workflow in this repo:
+
 ```text
-.github/workflows/publish-updates.yml
+.github/workflows/android-armv8-build.yml
 ```
 
-It will:
+It builds the Android Release package (`arm64-v8a` only).
+
+The full publishing pipeline `.github/workflows/publish-updates.yml` is currently disabled
+(kept as `publish-updates.yml.bak`). The steps it used to perform (now done manually):
 
 1. build Android split APKs for `armeabi-v7a` and `arm64-v8a`
 2. build the Windows installer
@@ -122,6 +127,8 @@ Workflow:
 ```text
 .github/workflows/ios_build.yml
 ```
+
+This workflow is currently disabled (kept as `ios_build.yml.bak`); build the IPA manually.
 
 Notes:
 

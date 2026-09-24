@@ -167,7 +167,7 @@ class _RecordListScreenState extends State<RecordListScreen>
     final snapshot = _recordListComputationService.buildSnapshot(
       gifts: _allGifts,
       guests: _guestMap.values.toList(growable: false),
-      isReceived: null,
+      isReceived: widget.isReceived,
       selectedCategory: _selectedCategory,
       searchQuery: _searchQuery,
     );

@@ -2,6 +2,9 @@
 
 本文档说明 `pubspec.yaml`、GitHub Actions `publish-updates.yml` 手动发布参数，以及 Android `versionCode` 的填写规则。
 
+> 注意：`publish-updates.yml` 当前已停用（保留为 `.bak`），下方「手动发布如何填写」一节在其重新启用后适用。
+> 当前唯一启用的工作流为 `.github/workflows/android-armv8-build.yml`，仅产出 arm64-v8a 包。
+
 ---
 
 ## 1. 规则目标
@@ -80,6 +83,9 @@ version: 1.3.2+1030299
 ```text
 .github/workflows/publish-updates.yml
 ```
+
+该工作流当前已停用（保留为 `publish-updates.yml.bak`）；下方参数填写规则在其重新启用后适用。
+当前唯一启用的工作流为 `.github/workflows/android-armv8-build.yml`。
 
 ### 4.1 发布 stable
 

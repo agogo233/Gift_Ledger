@@ -32,9 +32,12 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
   static const _keyHintFailCount = 'sec_hint_fail_count';
   static const _keyHintLockUntil = 'sec_hint_lock_until';
   static const _keyBiometricEnabled = 'sec_biometric_enabled'; // 指纹解锁开关
+  static const _keyLastFailTime = 'sec_last_fail_time';
+  static const _keyHintLastFailTime = 'sec_hint_last_fail_time';
   // 后台超时自动上锁的阈值：30s（更符合“快速离开就锁”的安全预期）
   static const _lockTimeout = Duration(seconds: 30);
   static const int _maxAttempts = 5;
+  static const _failResetWindow = Duration(minutes: 5);
 
   // 运行时状态
   DateTime? _pausedTimestamp;
@@ -176,6 +179,8 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
 
   /// 获取剩余尝试次数
   Future<int> getRemainingAttempts() async {
+    if (await _isFailCountStale(_keyLastFailTime)) return _maxAttempts;
+
     final countStr = await _storage.read(key: _keyFailCount) ?? '0';
     final count = int.tryParse(countStr) ?? 0;
     return _maxAttempts - count;
@@ -184,9 +189,11 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
   /// 清除锁定状态与错误计数（不影响 PIN/提示问题/安全模式）
   Future<void> clearLockout() async {
     await _storage.delete(key: _keyFailCount);
+    await _storage.delete(key: _keyLastFailTime);
     await _storage.delete(key: _keyLockUntil);
     await _storage.delete(key: _keyLockoutRound);
     await _storage.delete(key: _keyHintFailCount);
+    await _storage.delete(key: _keyHintLastFailTime);
     await _storage.delete(key: _keyHintLockUntil);
   }
 
@@ -216,6 +223,21 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
     if (round == 2) return const Duration(minutes: 5);
     if (round == 3) return const Duration(minutes: 15);
     return const Duration(hours: 1);
+  }
+
+  Future<bool> _isFailCountStale(String lastFailTimeKey) async {
+    final lastFailTimeStr = await _storage.read(key: lastFailTimeKey);
+    final lastFailTime = DateTime.tryParse(lastFailTimeStr ?? '');
+    if (lastFailTime == null) return true;
+
+    return DateTime.now().difference(lastFailTime) >= _failResetWindow;
+  }
+
+  Future<void> _resetStaleFailCount(String failCountKey, String lastFailTimeKey) async {
+    if (!await _isFailCountStale(lastFailTimeKey)) return;
+
+    await _storage.delete(key: failCountKey);
+    await _storage.delete(key: lastFailTimeKey);
   }
 
   String _generateSalt([int length = 32]) {
@@ -250,12 +272,14 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
     await _storage.delete(key: _keySalt);
     await _storage.delete(key: _keyHash);
     await _storage.delete(key: _keyFailCount);
+    await _storage.delete(key: _keyLastFailTime);
     await _storage.delete(key: _keyLockUntil);
     await _storage.delete(key: _keyLockoutRound);
     await _storage.delete(key: _keyHintQuestion);
     await _storage.delete(key: _keyHintSalt);
     await _storage.delete(key: _keyHintAnswerHash);
     await _storage.delete(key: _keyHintFailCount);
+    await _storage.delete(key: _keyHintLastFailTime);
     await _storage.delete(key: _keyHintLockUntil);
     await _storage.delete(key: _keyBiometricEnabled);
   }
@@ -278,8 +302,13 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
         await clearLockout();
         unlock();
       } else {
+        await _resetStaleFailCount(_keyFailCount, _keyLastFailTime);
         final countStr = await _storage.read(key: _keyFailCount) ?? '0';
         final newCount = (int.tryParse(countStr) ?? 0) + 1;
+        await _storage.write(
+          key: _keyLastFailTime,
+          value: DateTime.now().toIso8601String(),
+        );
 
         if (newCount >= _maxAttempts) {
           final roundStr = await _storage.read(key: _keyLockoutRound) ?? '0';
@@ -350,6 +379,7 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
     await _storage.write(key: _keyHintSalt, value: salt);
     await _storage.write(key: _keyHintAnswerHash, value: hash);
     await _storage.delete(key: _keyHintFailCount);
+    await _storage.delete(key: _keyHintLastFailTime);
     await _storage.delete(key: _keyHintLockUntil);
   }
 
@@ -382,10 +412,16 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
 
       if (isValid) {
         await _storage.delete(key: _keyHintFailCount);
+        await _storage.delete(key: _keyHintLastFailTime);
         await _storage.delete(key: _keyHintLockUntil);
       } else {
+        await _resetStaleFailCount(_keyHintFailCount, _keyHintLastFailTime);
         final countStr = await _storage.read(key: _keyHintFailCount) ?? '0';
         final newCount = (int.tryParse(countStr) ?? 0) + 1;
+        await _storage.write(
+          key: _keyHintLastFailTime,
+          value: DateTime.now().toIso8601String(),
+        );
         if (newCount >= _maxAttempts) {
           final lockTime = DateTime.now().add(const Duration(minutes: 15));
           await _storage.write(key: _keyHintLockUntil, value: lockTime.toIso8601String());
@@ -407,6 +443,7 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
     await _storage.delete(key: _keySalt);
     await _storage.delete(key: _keyHash);
     await _storage.delete(key: _keyFailCount);
+    await _storage.delete(key: _keyLastFailTime);
     await _storage.delete(key: _keyLockUntil);
     await _storage.delete(key: _keyLockoutRound);
     // 重置安全模式为无锁
@@ -423,6 +460,7 @@ class SecurityService extends ChangeNotifier with WidgetsBindingObserver {
     await _storage.delete(key: _keyHintSalt);
     await _storage.delete(key: _keyHintAnswerHash);
     await _storage.delete(key: _keyHintFailCount);
+    await _storage.delete(key: _keyHintLastFailTime);
     await _storage.delete(key: _keyHintLockUntil);
   }
 }

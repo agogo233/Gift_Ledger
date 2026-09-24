@@ -236,7 +236,7 @@ class NativeDatabaseService {
   Future<List<Gift>> getRecentGifts({int limit = 10}) async {
     await _ensureInitialized();
     final list = List<Gift>.from(_cachedGifts!);
-    list.sort((a, b) => b.date.compareTo(a.date));
+    list.sort((a, b) => (b.id ?? 0).compareTo(a.id ?? 0));
     return list.take(limit).toList();
   }
 
@@ -374,9 +374,10 @@ class NativeDatabaseService {
 
   Future<int> updateReturnStatus(int giftId, {required bool isReturned, int? relatedRecordId}) async {
     final gifts = await getAllGifts();
-    final target = gifts.firstWhere((g) => g.id == giftId);
+    final index = gifts.indexWhere((g) => g.id == giftId);
+    if (index == -1) return 0;
 
-    final updated = target.copyWith(
+    final updated = gifts[index].copyWith(
       isReturned: isReturned,
       relatedRecordId: relatedRecordId,
     );
@@ -386,10 +387,11 @@ class NativeDatabaseService {
 
   Future<int> incrementRemindedCount(int giftId) async {
     final gifts = await getAllGifts();
-    final target = gifts.firstWhere((g) => g.id == giftId);
+    final index = gifts.indexWhere((g) => g.id == giftId);
+    if (index == -1) return 0;
 
-    final updated = target.copyWith(
-      remindedCount: target.remindedCount + 1,
+    final updated = gifts[index].copyWith(
+      remindedCount: gifts[index].remindedCount + 1,
     );
 
     return await updateGift(updated);
@@ -397,11 +399,12 @@ class NativeDatabaseService {
 
   Future<void> linkGiftRecords(int giftId1, int giftId2) async {
     final gifts = await getAllGifts();
-    final gift1 = gifts.firstWhere((g) => g.id == giftId1);
-    final gift2 = gifts.firstWhere((g) => g.id == giftId2);
+    final index1 = gifts.indexWhere((g) => g.id == giftId1);
+    final index2 = gifts.indexWhere((g) => g.id == giftId2);
+    if (index1 == -1 || index2 == -1) return;
 
-    await updateGift(gift1.copyWith(relatedRecordId: giftId2, isReturned: true));
-    await updateGift(gift2.copyWith(relatedRecordId: giftId1, isReturned: true));
+    await updateGift(gifts[index1].copyWith(relatedRecordId: giftId2, isReturned: true));
+    await updateGift(gifts[index2].copyWith(relatedRecordId: giftId1, isReturned: true));
   }
 
   Future<int> getPendingCount({bool includeEventBooks = true}) async {
